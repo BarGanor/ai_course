@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.spatial.distance import cdist
 
+
 class BoardSearch:
     def __init__(self, starting_board, goal_board, search_method, detail_output):
         self.method_dict = {1: AStar}
@@ -12,10 +13,10 @@ class BoardSearch:
     def find_path(self):
 
         if self.less_agents_then_needed():
-            return 'No Possible Path'
+            print('No possible path')
 
         if self.search_method == AStar:
-            a_star = AStar(starting_board=starting_board, goal_board=goal_board, cost=1)
+            a_star = AStar(starting_board=self.starting_board, goal_board=self.goal_board, cost=1)
             path = a_star.search()
             if path is None:
                 print('No path was found')
@@ -24,7 +25,7 @@ class BoardSearch:
                 print('Path Found')
                 for step in path:
                     step.print(detail_output=self.detail_output)
-                print('Number of steps: ' + str(len(path)))
+
 
     def less_agents_then_needed(self):
         return (self.starting_board == 2).sum() < (self.goal_board == 2).sum()
@@ -81,7 +82,7 @@ class Node:
             path.append(current)
             current = current.parent
 
-        return path
+        return path[::-1]
 
     def change_board(self, agent_row, agent_col, wanted_row, wanted_col):
         changed_board = self.position.copy()
@@ -126,6 +127,7 @@ class Node:
 
         return float(min_dist)
 
+
 class Agent:
     def __init__(self, node, col, row):
         self.node = node
@@ -133,68 +135,49 @@ class Agent:
         self.row = row
 
     def get_moves(self):
-        moves = Moves(self.node, self.col, self.row)
+        move_left = Move(self.node, self.col, self.row, [0, -1])
+        move_right = Move(self.node, self.col, self.row, [0, 1])
+        move_up = Move(self.node, self.col, self.row, [1, 0])
+        move_down = Move(self.node, self.col, self.row, [-1, 0])
 
-        return moves.get_moves()
+        moves = [move_left.get_move(),
+                 move_right.get_move(),
+                 move_up.get_move(),
+                 move_down.get_move()
+                 ]
+
+        moves = [move for move in moves if move is not None]
+
+        return moves
 
 
-class Moves(Agent):
-    def __init__(self, node: Node, col, row):
+class Move(Agent):
+    def __init__(self, node: Node, col, row, direction):
         super().__init__(node, col, row)
         self.node = node
         self.row = row
         self.col = col
+        self.direction = direction
 
+    def get_move(self):
+        wanted_row = self.row + self.direction[0]
+        wanted_col = self.col + self.direction[1]
+        move = self.node.change_board(self.row, self.col, wanted_row=wanted_row, wanted_col=wanted_col)
 
-    def move_left(self):
-        try:
-            move_left = self.node.change_board(self.row, self.col, wanted_row=self.row, wanted_col=self.col - 1)
-            return move_left
-        except:
-            pass
-
-    def move_right(self):
-        try:
-            move_right = self.node.change_board(self.row, self.col, wanted_row=self.row, wanted_col=self.col + 1)
-            return move_right
-        except:
-            pass
-
-    def move_up(self):
-        try:
-            move_up = self.node.change_board(self.row, self.col, wanted_row=self.row + 1, wanted_col=self.col)
-            return move_up
-        except:
-            pass
-
-    def move_down(self):
-        try:
-            move_down = self.node.change_board(self.row, self.col, wanted_row=self.row - 1, wanted_col=self.col)
-            return move_down
-        except:
-            pass
-
-    def get_moves(self):
-
-        moves = [self.move_left(), self.move_right(), self.move_up(), self.move_down()]
-
-        return [move for move in moves if move is not None]
-
-
-
+        return move
 
 
 class AStar:
     def __init__(self, starting_board, goal_board, cost):
-        self.start = starting_board
-        self.end = goal_board
         self.cost = cost
         self.start_node = Node(None, starting_board)
         self.end_node = Node(None, goal_board)
         self.yet_to_visit = [self.start_node]
         self.visited = []
+
         self.tries = 0
-        self.max_tries = 30
+        self.max_tries = 15000
+        self.start_node.h = self.start_node.f = self.start_node.get_heuristic(self.end_node)
 
     def search(self):
         yet_to_visit = self.yet_to_visit
@@ -206,7 +189,6 @@ class AStar:
             current_index = 0
 
             current_node, current_index = self.pick_best_node(current_node, current_index)
-
             yet_to_visit.pop(current_index)
             self.visited.append(current_node)
 
@@ -214,7 +196,6 @@ class AStar:
                 return current_node.return_path()
 
             if self.check_max_tries():
-                print('Too many tries')
                 break
 
             agents = current_node.get_agents()  # Get all agents on board
@@ -263,20 +244,5 @@ class AStar:
 
 def find_path(starting_board, goal_board, search_method, detail_output):
     board_search = BoardSearch(starting_board, goal_board, search_method, detail_output)
-    board_search.find_path()
+    return board_search.find_path()
 
-
-starting_board = [[2, 0, 2, 0, 2, 0],
-                  [0, 0, 0, 2, 1, 2],
-                  [1, 0, 0, 0, 0, 0],
-                  [0, 0, 1, 0, 1, 0],
-                  [2, 0, 0, 0, 0, 0],
-                  [0, 1, 0, 0, 0, 0]]
-goal_board = [[2, 0, 2, 0, 0, 0],
-              [0, 0, 0, 2, 1, 2],
-              [1, 0, 0, 0, 0, 0],
-              [0, 0, 1, 0, 1, 2],
-              [0, 0, 0, 0, 0, 0],
-              [0, 1, 0, 0, 0, 0]]
-
-find_path(starting_board=starting_board, goal_board=goal_board, search_method=1, detail_output=True)
