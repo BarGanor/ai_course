@@ -1,19 +1,33 @@
 import numpy as np
 from scipy.spatial.distance import cdist
 
+class BoardSearch:
+    def __init__(self, starting_board, goal_board, search_method, detail_output):
+        self.method_dict = {1: AStar}
+        self.starting_board = np.array(starting_board)
+        self.goal_board = np.array(goal_board)
+        self.search_method = self.method_dict.get(search_method)
+        self.detail_output = detail_output
 
-def get_min_sum_of_distance(curr, goal):
-    curr_clean = [x for x in curr if x not in goal]
-    goal_clean = [x for x in goal if x not in curr]
+    def find_path(self):
 
-    if len(curr_clean) == 0:
-        return 0
+        if self.less_agents_then_needed():
+            return 'No Possible Path'
 
-    distances = cdist(np.array(curr_clean), np.array(goal_clean))
+        if self.search_method == AStar:
+            a_star = AStar(starting_board=starting_board, goal_board=goal_board, cost=1)
+            path = a_star.search()
+            if path is None:
+                print('No path was found')
 
-    min_dist = sum(min(distances, key=min))
+            else:
+                print('Path Found')
+                for step in path:
+                    step.print(detail_output=self.detail_output)
+                print('Number of steps: ' + str(len(path)))
 
-    return float(min_dist)
+    def less_agents_then_needed(self):
+        return (self.starting_board == 2).sum() < (self.goal_board == 2).sum()
 
 
 class Node:
@@ -46,7 +60,7 @@ class Node:
                     agents.append(agent)
         return agents
 
-    def print(self, detail_output):
+    def print(self, detail_output=False):
 
         transform_dict = {0: ' ', 1: '@', 2: '*'}
         print('  1 2 3 4 5 6')
@@ -61,15 +75,11 @@ class Node:
 
     def return_path(self):
         path = []
-
         current = self
 
         while current is not None:
             path.append(current)
             current = current.parent
-
-        # Return reversed so its start to end
-        path = path[::-1]
 
         return path
 
@@ -88,9 +98,7 @@ class Node:
             return None
 
     def get_coordinates(self):
-
         coordinates = np.where(self.position == 2)
-
         return list(zip(coordinates[0], coordinates[1]))
 
     def get_heuristic(self, end_node):
@@ -98,12 +106,25 @@ class Node:
         goal_coordinates = end_node.get_coordinates()
 
         if len(curr_coordinates) == len(goal_coordinates):
-            heuristic = get_min_sum_of_distance(curr_coordinates, goal_coordinates)
+            heuristic = self.get_min_sum_of_distance(curr_coordinates, goal_coordinates)
         else:
             heuristic = 100
 
         return heuristic
 
+    @staticmethod
+    def get_min_sum_of_distance(curr, goal):
+        curr_clean = [x for x in curr if x not in goal]
+        goal_clean = [x for x in goal if x not in curr]
+
+        if len(curr_clean) == 0:
+            return 0
+
+        distances = cdist(np.array(curr_clean), np.array(goal_clean))
+
+        min_dist = sum(min(distances, key=min))
+
+        return float(min_dist)
 
 class Agent:
     def __init__(self, node, col, row):
@@ -123,6 +144,7 @@ class Moves(Agent):
         self.node = node
         self.row = row
         self.col = col
+
 
     def move_left(self):
         try:
@@ -159,33 +181,7 @@ class Moves(Agent):
         return [move for move in moves if move is not None]
 
 
-class BoardSearch:
-    def __init__(self, starting_board, goal_board, search_method, detail_output):
-        self.method_dict = {1: AStar}
-        self.starting_board = np.array(starting_board)
-        self.goal_board = np.array(goal_board)
-        self.search_method = self.method_dict.get(search_method)
-        self.detail_output = detail_output
 
-    def find_path(self):
-
-        if self.less_agents_then_needed():
-            return 'No Possible Path'
-
-        if self.search_method == AStar:
-            a_star = AStar(starting_board=starting_board, goal_board=goal_board, cost=1)
-            path = a_star.search()
-            if path is None:
-                print('No path was found')
-
-            else:
-                print('Path Found')
-                for step in path:
-                    step.print(detail_output=self.detail_output)
-                print('Number of steps: ' + str(len(path)))
-
-    def less_agents_then_needed(self):
-        return (self.starting_board == 2).sum() < (self.goal_board == 2).sum()
 
 
 class AStar:
@@ -193,23 +189,15 @@ class AStar:
         self.start = starting_board
         self.end = goal_board
         self.cost = cost
+        self.start_node = Node(None, starting_board)
         self.end_node = Node(None, goal_board)
-        self.yet_to_visit = []
+        self.yet_to_visit = [self.start_node]
         self.visited = []
         self.tries = 0
         self.max_tries = 30
-        self.max_tries_exceeded = self.tries > self.max_tries
 
     def search(self):
-        cost = self.cost
-        end_node = self.end_node
         yet_to_visit = self.yet_to_visit
-        visited = self.visited
-
-        start_node = Node(None, starting_board)
-        start_node.h = start_node.f = start_node.get_heuristic(end_node)
-
-        yet_to_visit.append(start_node)
 
         while len(yet_to_visit) > 0:
             self.tries += 1
@@ -217,44 +205,60 @@ class AStar:
             current_node = yet_to_visit[0]
             current_index = 0
 
-            for index, item in enumerate(yet_to_visit):
-                if item.f < current_node.f:
-                    current_node = item
-                    current_index = index
-            yet_to_visit.pop(current_index)
-            visited.append(current_node)
+            current_node, current_index = self.pick_best_node(current_node, current_index)
 
-            if current_node == end_node:
+            yet_to_visit.pop(current_index)
+            self.visited.append(current_node)
+
+            if current_node == self.end_node:
                 return current_node.return_path()
 
-            current_node.print(True)
+            if self.check_max_tries():
+                print('Too many tries')
+                break
 
-            # Get all children nodes
-            agents = current_node.get_agents()
-            children = []
-            for agent in agents:
+            agents = current_node.get_agents()  # Get all agents on board
+            children = self.get_children(current_node, agents)  # Get all children_nodes
+            self.add_children_yet_to_visit(children, current_node)  # Append children to yet to visit
 
-                moves = agent.get_moves()
-                for new_position in moves:
-                    new_node = Node(current_node, new_position)
-                    children.append(new_node)
+    def check_max_tries(self):
+        return self.tries > self.max_tries
 
-            # Add children to yet visited
-            for child in children:
-                # Child in on the visited list
-                if len([visited_child for visited_child in visited if visited_child == child]) > 0:
-                    continue
+    def pick_best_node(self, current_node, current_index):
+        for index, item in enumerate(self.yet_to_visit):
+            if item.f < current_node.f:
+                current_node = item
+                current_index = index
 
-                child.g = current_node.g + cost
-                child.h = child.get_heuristic(end_node)
-                child.f = child.g + child.h
+        return current_node, current_index
 
-                # Child is already in the yet to visit list and g cost is already higher
-                if len([yet_visited for yet_visited in yet_to_visit if child == yet_visited and child.g > yet_visited.g]):
-                    continue
+    @staticmethod
+    def get_children(current_node, agents):
+        children = []
+        for agent in agents:
 
+            moves = agent.get_moves()
+            for new_position in moves:
+                new_node = Node(current_node, new_position)
+                children.append(new_node)
 
-                yet_to_visit.append(child)
+        return children
+
+    def add_children_yet_to_visit(self, children, current_node):
+        for child in children:
+            # Child in on the visited list
+            if len([visited_child for visited_child in self.visited if visited_child == child]) > 0:
+                continue
+
+            child.g = current_node.g + self.cost
+            child.h = child.get_heuristic(self.end_node)
+            child.f = child.g + child.h
+
+            # Child is already in the yet to visit list and g cost is already higher
+            if len([yet_visited for yet_visited in self.yet_to_visit if child == yet_visited and child.g > yet_visited.g]):
+                continue
+
+            self.yet_to_visit.append(child)
 
 
 def find_path(starting_board, goal_board, search_method, detail_output):
@@ -262,17 +266,17 @@ def find_path(starting_board, goal_board, search_method, detail_output):
     board_search.find_path()
 
 
-starting_board = [[0, 1, 0, 0, 0, 0],
-                  [0, 1, 0, 1, 1, 0],
-                  [0, 1, 0, 1, 0, 0],
-                  [0, 1, 0, 1, 0, 1],
-                  [0, 1, 0, 1, 2, 2],
-                  [0, 0, 0, 1, 2, 2]]
-goal_board = [[2, 1, 0, 0, 0, 0],
-              [0, 1, 0, 1, 1, 0],
-              [2, 1, 2, 1, 0, 0],
-              [0, 1, 0, 1, 0, 1],
-              [0, 1, 0, 1, 0, 0],
-              [0, 0, 0, 1, 0, 0]]
+starting_board = [[2, 0, 2, 0, 2, 0],
+                  [0, 0, 0, 2, 1, 2],
+                  [1, 0, 0, 0, 0, 0],
+                  [0, 0, 1, 0, 1, 0],
+                  [2, 0, 0, 0, 0, 0],
+                  [0, 1, 0, 0, 0, 0]]
+goal_board = [[2, 0, 2, 0, 0, 0],
+              [0, 0, 0, 2, 1, 2],
+              [1, 0, 0, 0, 0, 0],
+              [0, 0, 1, 0, 1, 2],
+              [0, 0, 0, 0, 0, 0],
+              [0, 1, 0, 0, 0, 0]]
 
-find_path(starting_board=starting_board, goal_board=goal_board, search_method=1, detail_output=None)
+find_path(starting_board=starting_board, goal_board=goal_board, search_method=1, detail_output=True)
