@@ -2,6 +2,8 @@ import numpy as np
 from scipy.spatial.distance import cdist
 
 
+# from HillClimbing import HillClimbing
+
 class BoardSearch:
     def __init__(self, starting_board, goal_board, search_method, detail_output):
         self.method_dict = {1: AStar}
@@ -19,13 +21,20 @@ class BoardSearch:
             a_star = AStar(starting_board=self.starting_board, goal_board=self.goal_board, cost=1)
             path = a_star.search()
             if path is None:
-                print('No path was found')
+                print('No path found')
 
             else:
-                print('Path Found')
-                for step in path:
-                    step.print(detail_output=self.detail_output)
+                for i in range(len(path)):
+                    if i == 0:
+                        print('Board 1 (starting position):')
+                        path[i].print(detail_output=False)
 
+                    elif i == len(path):
+                        print('Board ' + str(i+1) + '(goal position):')
+                        path[i].print(detail_output=self.detail_output, last=True)
+                    else:
+                        print('Board ' + str(i+1) + ':')
+                        path[i].print(detail_output=self.detail_output)
 
     def less_agents_then_needed(self):
         return (self.starting_board == 2).sum() < (self.goal_board == 2).sum()
@@ -61,8 +70,7 @@ class Node:
                     agents.append(agent)
         return agents
 
-    def print(self, detail_output=False):
-
+    def print(self, detail_output=False, last=False):
         transform_dict = {0: ' ', 1: '@', 2: '*'}
         print('  1 2 3 4 5 6')
         for row in range(len(self.position)):
@@ -72,7 +80,9 @@ class Node:
 
         if self.h is not None and detail_output:
             print('Heuristic:' + str(self.h))
-        print('-' * 5)
+
+        if not last:
+            print('-' * 5)
 
     def return_path(self):
         path = []
@@ -147,7 +157,6 @@ class Agent:
                  ]
 
         moves = [move for move in moves if move is not None]
-
         return moves
 
 
@@ -167,6 +176,11 @@ class Move(Agent):
         return move
 
 
+def find_path(starting_board, goal_board, search_method, detail_output):
+    board_search = BoardSearch(starting_board, goal_board, search_method, detail_output)
+    return board_search.find_path()
+
+
 class AStar:
     def __init__(self, starting_board, goal_board, cost):
         self.cost = cost
@@ -176,7 +190,7 @@ class AStar:
         self.visited = []
 
         self.tries = 0
-        self.max_tries = 15000
+        self.max_tries = 1500
         self.start_node.h = self.start_node.f = self.start_node.get_heuristic(self.end_node)
 
     def search(self):
@@ -236,13 +250,22 @@ class AStar:
             child.f = child.g + child.h
 
             # Child is already in the yet to visit list and g cost is already higher
-            if len([yet_visited for yet_visited in self.yet_to_visit if child == yet_visited and child.g > yet_visited.g]):
+            if len([yet_visited for yet_visited in self.yet_to_visit if child == yet_visited and child.g >= yet_visited.g]) > 0:
                 continue
 
             self.yet_to_visit.append(child)
 
 
-def find_path(starting_board, goal_board, search_method, detail_output):
-    board_search = BoardSearch(starting_board, goal_board, search_method, detail_output)
-    return board_search.find_path()
-
+starting_board = [[2, 0, 2, 0, 2, 0],
+                  [0, 0, 0, 2, 1, 2],
+                  [1, 0, 0, 0, 0, 0],
+                  [0, 0, 1, 0, 1, 0],
+                  [2, 0, 0, 0, 0, 0],
+                  [0, 1, 0, 0, 0, 0]]
+goal_board = [[2, 0, 2, 0, 0, 0],
+              [0, 0, 0, 2, 1, 2],
+              [1, 0, 0, 0, 0, 0],
+              [0, 0, 1, 0, 1, 2],
+              [0, 0, 0, 0, 0, 0],
+              [0, 1, 0, 0, 0, 0]]
+find_path(starting_board, goal_board, 1, True)
