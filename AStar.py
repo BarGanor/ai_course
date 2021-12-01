@@ -1,6 +1,8 @@
+# from q1 import Node
+
 
 class AStar:
-    def __init__(self, starting_board, goal_board, cost, Node):
+    def __init__(self, starting_board, goal_board, cost):
         self.cost = cost
         self.start_node = Node(None, starting_board)
         self.end_node = Node(None, goal_board)
@@ -19,7 +21,6 @@ class AStar:
 
             current_node = yet_to_visit[0]
             current_index = 0
-
 
             current_node, current_index = self.pick_best_node(current_node, current_index)
             yet_to_visit.pop(current_index)
@@ -73,4 +74,3 @@ class AStar:
                 continue
 
             self.yet_to_visit.append(child)
-

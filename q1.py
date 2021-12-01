@@ -1,12 +1,16 @@
 import numpy as np
 from scipy.spatial.distance import cdist
 
+from AStar import AStar
+import random
 
-# from HillClimbing import HillClimbing
+HillClimbing=None
+LocalBeam = None
+
 
 class BoardSearch:
     def __init__(self, starting_board, goal_board, search_method, detail_output):
-        self.method_dict = {1: AStar}
+        self.method_dict = {1: AStar, 2: HillClimbing, 3: SimulatedAnnealing, 4: LocalBeam}
         self.starting_board = np.array(starting_board)
         self.goal_board = np.array(goal_board)
         self.search_method = self.method_dict.get(search_method)
@@ -15,26 +19,45 @@ class BoardSearch:
     def find_path(self):
 
         if self.less_agents_then_needed():
-            print('No possible path')
+            return 'No possible path'
 
         if self.search_method == AStar:
             a_star = AStar(starting_board=self.starting_board, goal_board=self.goal_board, cost=1)
             path = a_star.search()
-            if path is None:
-                print('No path found')
+        #
+        # elif self.search_method == HillClimbing:
+        #     hill_climbing = HillClimbing(starting_board=self.starting_board, goal_board=goal_board)
+        #     path = hill_climbing.search()
 
-            else:
-                for i in range(len(path)):
-                    if i == 0:
-                        print('Board 1 (starting position):')
-                        path[i].print(detail_output=False)
+        elif self.search_method == SimulatedAnnealing:
+            simulated_annealing = SimulatedAnnealing(starting_board=self.starting_board, goal_board=goal_board)
+            path = simulated_annealing.search()
 
-                    elif i == len(path):
-                        print('Board ' + str(i+1) + '(goal position):')
-                        path[i].print(detail_output=self.detail_output, last=True)
-                    else:
-                        print('Board ' + str(i+1) + ':')
-                        path[i].print(detail_output=self.detail_output)
+        # elif self.search_method == LocalBeam:
+        #     local_beam = LocalBeam(starting_board=self.starting_board, goal_board=self.goal_board)
+        #     path = local_beam.search()
+
+        else:
+            path = None
+
+        self.print_path(path)
+
+    def print_path(self, path):
+        if path is None:
+            print('No path found')
+
+        else:
+            for i in range(len(path)):
+                if i == 0:
+                    print('Board 1 (starting position):')
+                    path[i].print(detail_output=False)
+
+                elif i == len(path) - 1:
+                    print('Board ' + str(i + 1) + '(goal position):')
+                    path[i].print(detail_output=self.detail_output, last=True)
+                else:
+                    print('Board ' + str(i + 1) + ':')
+                    path[i].print(detail_output=self.detail_output)
 
     def less_agents_then_needed(self):
         return (self.starting_board == 2).sum() < (self.goal_board == 2).sum()
@@ -54,7 +77,10 @@ class Node:
         self.f = 0
 
     def __eq__(self, other):
+        if other is None:
+            return False
         comparison = self.position == other.position
+
         return comparison.all()
 
     def get_agents(self):
@@ -123,6 +149,7 @@ class Node:
 
         return heuristic
 
+
     @staticmethod
     def get_min_sum_of_distance(curr, goal):
         curr_clean = [x for x in curr if x not in goal]
@@ -176,84 +203,77 @@ class Move(Agent):
         return move
 
 
-def find_path(starting_board, goal_board, search_method, detail_output):
-    board_search = BoardSearch(starting_board, goal_board, search_method, detail_output)
-    return board_search.find_path()
 
+import numpy as np
+import random
 
-class AStar:
-    def __init__(self, starting_board, goal_board, cost):
-        self.cost = cost
+class SimulatedAnnealing:
+    def __init__(self, starting_board, goal_board):
         self.start_node = Node(None, starting_board)
         self.end_node = Node(None, goal_board)
-        self.yet_to_visit = [self.start_node]
-        self.visited = []
-
-        self.tries = 0
-        self.max_tries = 1500
-        self.start_node.h = self.start_node.f = self.start_node.get_heuristic(self.end_node)
+        self.start_node.h = self.start_node.get_heuristic(self.end_node)
+        self.initial_temp = 100
+        self.final_temp = .1
+        self.alpha = 0.01
 
     def search(self):
-        yet_to_visit = self.yet_to_visit
+        current_state = self.start_node
 
-        while len(yet_to_visit) > 0:
-            self.tries += 1
+        for t in range(100):
 
-            current_node = yet_to_visit[0]
-            current_index = 0
+            if current_state == self.end_node:
+                return current_state.return_path()
 
-            current_node, current_index = self.pick_best_node(current_node, current_index)
-            yet_to_visit.pop(current_index)
-            self.visited.append(current_node)
+            current_temp = self.schedule(t)
 
-            if current_node == self.end_node:
-                return current_node.return_path()
+            if current_temp == 0:
+                return current_state.return_path()
 
-            if self.check_max_tries():
-                break
+            step_chosen = False
+            steps_considered = []
+            while not step_chosen:
+                next_step = self.get_random_successor(current_state)
+                delta_e = current_state.h - next_step.h
 
-            agents = current_node.get_agents()  # Get all agents on board
-            children = self.get_children(current_node, agents)  # Get all children_nodes
-            self.add_children_yet_to_visit(children, current_node)  # Append children to yet to visit
+                if delta_e > 0:
+                    current_state = next_step
 
-    def check_max_tries(self):
-        return self.tries > self.max_tries
+                elif next_step not in steps_considered:
+                    prob = np.exp(delta_e / current_temp)
+                    current_state = random.choices(population=[current_state, next_step], weights=[1 - prob, prob], k=1)[0]
 
-    def pick_best_node(self, current_node, current_index):
-        for index, item in enumerate(self.yet_to_visit):
-            if item.f < current_node.f:
-                current_node = item
-                current_index = index
+                if current_state == next_step:
+                    step_chosen = True
 
-        return current_node, current_index
+                else:
+                    steps_considered.append(next_step)
 
-    @staticmethod
-    def get_children(current_node, agents):
+
+    def schedule(self, t):
+        return min(pow((self.initial_temp - t), (1/10)), 1)
+
+    def get_random_successor(self, current):
+        agents = current.get_agents()
+        moves = self.get_children(current_node=current, agents=agents)
+        random_move = random.choice(moves)
+
+        return random_move
+
+    def get_children(self, current_node, agents):
         children = []
         for agent in agents:
 
             moves = agent.get_moves()
             for new_position in moves:
                 new_node = Node(current_node, new_position)
+                new_node.h = new_node.get_heuristic(self.end_node)
                 children.append(new_node)
-
         return children
 
-    def add_children_yet_to_visit(self, children, current_node):
-        for child in children:
-            # Child in on the visited list
-            if len([visited_child for visited_child in self.visited if visited_child == child]) > 0:
-                continue
 
-            child.g = current_node.g + self.cost
-            child.h = child.get_heuristic(self.end_node)
-            child.f = child.g + child.h
-
-            # Child is already in the yet to visit list and g cost is already higher
-            if len([yet_visited for yet_visited in self.yet_to_visit if child == yet_visited and child.g >= yet_visited.g]) > 0:
-                continue
-
-            self.yet_to_visit.append(child)
+def find_path(starting_board, goal_board, search_method, detail_output):
+    board_search = BoardSearch(starting_board, goal_board, search_method, detail_output)
+    return board_search.find_path()
 
 
 starting_board = [[2, 0, 2, 0, 2, 0],
@@ -264,8 +284,9 @@ starting_board = [[2, 0, 2, 0, 2, 0],
                   [0, 1, 0, 0, 0, 0]]
 goal_board = [[2, 0, 2, 0, 0, 0],
               [0, 0, 0, 2, 1, 2],
-              [1, 0, 0, 0, 0, 0],
-              [0, 0, 1, 0, 1, 2],
+              [1, 0, 0, 0, 0, 2],
+              [0, 0, 1, 0, 1, 0],
               [0, 0, 0, 0, 0, 0],
               [0, 1, 0, 0, 0, 0]]
-find_path(starting_board, goal_board, 1, True)
+
+find_path(starting_board, goal_board, 4, True)
